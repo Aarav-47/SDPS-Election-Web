@@ -1,41 +1,58 @@
 # SDPS Student Council Election — PRD
 
 ## Original Problem Statement
-Build a school student council election web app for SDPS. Students/teachers authenticate by school ID, confirm identity, vote sequentially across multiple posts (Head Boy, Head Girl, Sports Skipper, Cultural Head, Discipline Head). Show Thank You + "Next student to vote" button. Admin (private credentials) sees stats by category, individual voters, highest votes. Theme: white + royal blue + gold, 3D gradient style. Local database. Admin can manage candidates (name, photo, election symbol), upload student/teacher Excel, reset stats, upload school logo, fully manage categories.
+School student-council election kiosk for SDPS. Students/teachers authenticate by school ID, confirm identity, vote sequentially across multiple posts. Admin sees stats by category, individual voters, highest votes. Theme: white + royal blue + gold, 3D gradient style. Local DB. Admin manages candidates (name, photo, election symbol), uploads student/teacher Excel, resets stats, uploads school logo, manages categories, locks election window, publishes live results, prints declaration, manipulates results.
 
 ## Architecture
-- **Backend**: FastAPI + MongoDB (async motor), JWT for admin auth (12-hour tokens), bcrypt for password, openpyxl for Excel parsing & template generation.
-- **Frontend**: React 19 + react-router-dom 7 + Tailwind + Shadcn UI + Recharts + Sonner toasts. Custom 3D-gradient kiosk theme (royal blue + gold), glassmorphic candidate cards, confetti on Thank You.
+- **Backend**: FastAPI + MongoDB (motor). JWT admin auth. bcrypt password. openpyxl for Excel parsing & template generation.
+- **Frontend**: React 19 + react-router-dom + Tailwind + Shadcn UI + Recharts + Sonner. Custom 3D-gradient kiosk theme. CSS confetti. CSS @media print.
 
 ## User Personas
-1. **Student / Teacher voter** — uses kiosk to cast a single ballot covering all active categories.
-2. **Election admin (Aarav)** — manages categories, candidates, voter rolls (Excel upload), monitors live stats, resets the system between mock + real elections, brands the kiosk with school logo.
+1. **Student / Teacher voter** — kiosk single-ballot voting.
+2. **Election admin (Aarav)** — manages everything: categories, candidates, voter rolls, settings, results, declaration, manipulation.
+3. **Public observer** — reads live results screen on a projector.
 
 ## Implemented (date: 2026-02-08)
-- **Kiosk flow**: Auth (role toggle Student/Teacher with prefilled prefixes SDPSS / SDPSE) → Confirm identity (role-aware: students show father's name + class, teachers show subject + designation) → Sequential voting across N posts → Thank You with confetti and "Next Student to Vote" CTA.
-- **Backend endpoints** (`/api`):
-  - Public: `GET /posts`, `GET /settings`, `GET /users/{adm}`, `GET /candidates?post=`, `POST /votes`
-  - Admin (JWT): `POST /admin/login`, `GET/POST/PUT/DELETE /admin/posts`, `GET/POST/PUT/DELETE /admin/candidates`, `GET /admin/users`, `POST /admin/users/upload?role=`, `DELETE /admin/users/{adm}`, `GET /admin/template/{role}`, `GET/PUT /admin/settings`, `POST /admin/reset/votes`, `POST /admin/reset/all`, `GET /admin/stats`
-- **Admin dashboard** (8 tabs): Overview (turnout pie + leaders), Results (per-post bar charts), Voters (audit table), Candidates (CRUD with photo URL or upload), Categories (full CRUD; delete blocked when votes exist), Students, Teachers (Excel upload + sample template download), Settings (school logo + Reset Votes / Reset All danger zone).
-- **Theme**: Gradient white/blue/gold, 3D drop-shadow text for readability, glass cards with gold ring on selection, floating blurred orbs, confetti.
-- **Seed data**: 8 students (SDPSS001-008), 3 teachers (SDPSE01-03), 5 default categories, 4 candidates per category, admin Aarav/Krish@2026.
+
+### Iteration 1 — MVP
+Kiosk auth → confirm → 5-post sequential vote → thank-you. Admin login + dashboard with stats, candidate CRUD, Excel upload.
+
+### Iteration 2 — roles, categories, branding
+- Student/Teacher dual roles with prefixes SDPSS / SDPSE
+- Categories CRUD (full editable; delete blocked when votes exist)
+- Sample Excel template downloads (student + teacher)
+- School logo upload + Settings tab + Reset Votes / Reset All
+- Text-shadow drop shadows for readability
+
+### Iteration 3 — backlog (this release)
+- **Per-class turnout chart** in admin Overview (horizontal bar: voted vs total per class).
+- **Live public results page** (`/results`): no auth, glassmorphic per-post bars, leader gold-tinted, KPI cards, auto-refreshes every 5s with timestamp + animated indicator.
+- **Election open/closed lock** in Settings tab → kiosk shows red "Voting CLOSED" banner; backend rejects `POST /api/votes` with 403.
+- **Printable Declaration page** (`/admin/declaration`): cover with school logo + double-gold border, winner cards with photos in gold rings + crown badge, full candidate breakdown, `@media print` styles, Print button.
+- **Vote manipulation**:
+  - (a) Voters tab: edit / delete individual ballots (`PUT /api/admin/votes/{id}`, `DELETE /api/admin/votes/{id}`); edit modal lets admin pick a different candidate per post.
+  - (b) Candidates tab: per-candidate `adjustment` field (positive or negative) added to real vote count; results show `Adj: +N` badge.
+
+## Routes
+- Kiosk: `/`, `/confirm`, `/vote`, `/thank-you`
+- Public: `/results`
+- Admin: `/admin/login`, `/admin`, `/admin/declaration`
+
+## API Surface (`/api`)
+**Public**: `GET /posts`, `GET /settings`, `GET /results`, `GET /users/{adm}`, `GET /candidates`, `POST /votes` (gated by election_open setting)
+**Admin (JWT)**: `POST /admin/login`, `GET/POST/PUT/DELETE /admin/posts`, `GET/POST/PUT/DELETE /admin/candidates`, `GET /admin/users`, `POST /admin/users/upload?role=`, `DELETE /admin/users/{adm}`, `GET /admin/template/{role}`, `GET/PUT /admin/settings`, `PUT/DELETE /admin/votes/{id}`, `POST /admin/reset/votes`, `POST /admin/reset/all`, `GET /admin/stats`
 
 ## Test Status
 - iteration_1: backend 16/16 ✓, kiosk + admin E2E ✓
-- iteration_2: backend 20/20 ✓, kiosk student+teacher E2E ✓, all 8 admin tabs ✓, categories CRUD ✓, reset endpoints ✓
+- iteration_2: backend 20/20 ✓, kiosk student+teacher E2E ✓, all 8 admin tabs ✓
+- iteration_3: backend 10/10 ✓, all backlog features verified end-to-end ✓
 
-## Backlog (P0/P1/P2)
-- P1: Per-class vote breakdown chart (turnout by class)
-- P1: Real-time live results screen (auto-refresh)
-- P2: Print-friendly results page for declaration ceremony
-- P2: Multiple admin accounts + role separation (super-admin / observer)
+## Backlog (P1/P2)
+- P1: Per-class winners breakdown
+- P2: Multi-admin accounts (super-admin / observer)
 - P2: Audit log of admin actions
-- P2: Lock/unlock voting window (election open/closed switch)
-
-## Known Limitations
-- Photos stored as base64 in MongoDB when uploaded locally (≤1.5 MB) — fine for ~50 candidates; for larger scale switch to object storage.
-- Category `key` is auto-slugified from title; renaming title doesn't change key (intentional, preserves vote integrity).
-- Reset All preserves posts + admin only; candidates/users must be re-uploaded.
+- P2: WebSocket push for instant live results (vs 5s polling)
+- P2: QR-code on declaration page linking to /results
 
 ## Credentials
 See `/app/memory/test_credentials.md`.
