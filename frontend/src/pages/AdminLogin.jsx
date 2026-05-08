@@ -27,15 +27,14 @@ export default function AdminLogin() {
 
       toast.success("Welcome, " + data.username);
 
-      const params = new URLSearchParams(window.location.search);
-      const redirect = params.get("redirect");
+    const params = new URLSearchParams(window.location.search);
+const redirect = params.get("redirect");
 
-      if (redirect === "results") {
-        navigate("/results");
-      } else {
-        navigate("/admin");
-      }
-
+if (redirect) {
+  navigate(`/${redirect}`);
+} else {
+  navigate("/admin");
+}
     } catch (err) {
       toast.error(
         err?.response?.data?.detail || "Invalid credentials"
