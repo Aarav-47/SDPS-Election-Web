@@ -28,7 +28,6 @@ export default function App() {
           <Route path="/admin/declaration" element={<Declaration />} />
         </Routes>
         <Toaster position="top-center" richColors closeButton />
-        <SpeedInsights />
       </VoteProvider>
     </BrowserRouter>
   );
