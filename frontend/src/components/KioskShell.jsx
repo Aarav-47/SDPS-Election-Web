@@ -1,7 +1,15 @@
+import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import { api } from "../lib/api";
 
 export const KioskShell = ({ children }) => {
+  const [logo, setLogo] = useState("");
+
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => setLogo(data?.school_logo || "")).catch(() => {});
+  }, []);
+
   return (
     <div className="kiosk-bg min-h-screen relative">
       <div className="orb b w-[520px] h-[520px] -top-40 -left-32" />
@@ -10,10 +18,16 @@ export const KioskShell = ({ children }) => {
 
       <header className="relative z-10 max-w-6xl mx-auto px-6 pt-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-               style={{ background: "linear-gradient(135deg, #0F3C8A, #1A55B6)" }}>
-            <ShieldCheck className="w-6 h-6 text-white" />
-          </div>
+          {logo ? (
+            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white p-1 shadow-md">
+              <img src={logo} alt="School logo" className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                 style={{ background: "linear-gradient(135deg, #0F3C8A, #1A55B6)" }}>
+              <ShieldCheck className="w-6 h-6 text-white" />
+            </div>
+          )}
           <div>
             <div className="text-xs tracking-[0.28em] text-[color:var(--sdps-muted)] font-bold">SDPS</div>
             <div className="font-display font-bold text-lg leading-none text-[color:var(--sdps-ink)]">

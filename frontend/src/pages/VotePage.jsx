@@ -2,39 +2,47 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { KioskShell } from "../components/KioskShell";
 import { useVote } from "../context/VoteContext";
-import { api, POST_LABELS, POST_ORDER } from "../lib/api";
+import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Check, ArrowRight, ArrowLeft, Award } from "lucide-react";
 
 export default function VotePage() {
   const { student, selections, setSelections, stepIndex, setStepIndex } = useVote();
   const navigate = useNavigate();
+  const [posts, setPosts] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const postKey = POST_ORDER[stepIndex];
-  const postLabel = POST_LABELS[postKey];
-  const total = POST_ORDER.length;
-  const progressPct = Math.round(((stepIndex + 0) / total) * 100);
-  const selected = selections?.[postKey];
-
   useEffect(() => {
     if (!student) return;
+    api.get("/posts")
+      .then(({ data }) => setPosts(data))
+      .catch(() => toast.error("Failed to load categories"));
+  }, [student]);
+
+  const post = posts[stepIndex];
+  const total = posts.length;
+  const progressPct = total ? Math.round((stepIndex / total) * 100) : 0;
+  const selected = post ? selections?.[post.key] : null;
+
+  useEffect(() => {
+    if (!student || !post) return;
     let active = true;
     setLoading(true);
-    api.get(`/candidates`, { params: { post: postKey } })
+    api.get(`/candidates`, { params: { post: post.key } })
       .then(({ data }) => { if (active) setCandidates(data); })
       .catch(() => toast.error("Failed to load candidates"))
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [postKey, student]);
+  }, [post, student]);
 
   if (!student) return <Navigate to="/" replace />;
 
-  const choose = (cid) => setSelections({ ...selections, [postKey]: cid });
+  const choose = (cid) => post && setSelections({ ...selections, [post.key]: cid });
 
   const next = async () => {
+    if (!post) return;
     if (!selected) {
       toast.error("Please select a candidate");
       return;
@@ -44,13 +52,9 @@ export default function VotePage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    // Submit
     setSubmitting(true);
     try {
-      await api.post("/votes", {
-        admission_no: student.admission_no,
-        selections,
-      });
+      await api.post("/votes", { admission_no: student.admission_no, selections });
       navigate("/thank-you");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Failed to submit vote");
@@ -59,9 +63,18 @@ export default function VotePage() {
     }
   };
 
-  const prev = () => {
-    if (stepIndex > 0) setStepIndex(stepIndex - 1);
-  };
+  const prev = () => { if (stepIndex > 0) setStepIndex(stepIndex - 1); };
+
+  if (!total) {
+    return (
+      <KioskShell>
+        <div className="glass rounded-3xl p-12 text-center max-w-xl mx-auto">
+          <h1 className="font-display text-3xl font-bold hero-3d">No active categories</h1>
+          <p className="text-[color:var(--sdps-ink)] mt-3">The administrator hasn't set up any voting categories yet.</p>
+        </div>
+      </KioskShell>
+    );
+  }
 
   return (
     <KioskShell>
@@ -73,19 +86,14 @@ export default function VotePage() {
           </div>
         </div>
         <div className="h-3 rounded-full bg-blue-100 overflow-hidden mb-8">
-          <div
-            className="h-full transition-all duration-500"
-            style={{
-              width: `${progressPct}%`,
-              background: "linear-gradient(90deg, #0F3C8A, #D4AF37)",
-            }}
-          />
+          <div className="h-full transition-all duration-500"
+               style={{ width: `${progressPct}%`, background: "linear-gradient(90deg, #0F3C8A, #D4AF37)" }} />
         </div>
 
         <h1 className="font-display text-4xl md:text-6xl font-black hero-3d leading-tight">
-          Vote for <span className="gold-text">{postLabel}</span>
+          Vote for <span className="gold-text">{post?.title}</span>
         </h1>
-        <p className="mt-3 text-lg text-[color:var(--sdps-muted)]">Tap a candidate card to make your selection.</p>
+        <p className="mt-3 text-lg text-[color:var(--sdps-ink)] font-medium">Tap a candidate card to make your selection.</p>
       </div>
 
       {loading ? (
@@ -94,37 +102,27 @@ export default function VotePage() {
         </div>
       ) : candidates.length === 0 ? (
         <div className="glass rounded-3xl p-10 mt-10 text-center">
-          <p className="text-lg text-[color:var(--sdps-muted)]">No candidates added yet for this post. Please contact the admin.</p>
+          <p className="text-lg text-[color:var(--sdps-ink)] font-medium">No candidates added yet for this post.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-10">
           {candidates.map((c, i) => {
             const isSel = selected === c.id;
             return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => choose(c.id)}
+              <button key={c.id} type="button" onClick={() => choose(c.id)}
                 data-testid={`vote-candidate-card-${c.id}`}
                 className={`candidate-card text-left rounded-3xl p-5 relative rise delay-${(i % 4) + 1} ${isSel ? "selected" : ""}`}
               >
                 {isSel && (
-                  <div
-                    className="absolute -top-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center"
-                    style={{ background: "linear-gradient(180deg,#F4D571,#D4AF37)", boxShadow: "0 8px 20px rgba(212,175,55,0.5)" }}
-                  >
+                  <div className="absolute -top-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center"
+                       style={{ background: "linear-gradient(180deg,#F4D571,#D4AF37)", boxShadow: "0 8px 20px rgba(212,175,55,0.5)" }}>
                     <Check className="w-5 h-5 text-white" />
                   </div>
                 )}
                 <div className="flex items-start gap-4">
                   <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-100 to-blue-200">
-                    {c.photo ? (
-                      <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-[color:var(--sdps-blue)]">
-                        {c.name?.[0] || "?"}
-                      </div>
-                    )}
+                    {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-[color:var(--sdps-blue)]">{c.name?.[0] || "?"}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs tracking-[0.22em] uppercase font-bold text-[color:var(--sdps-muted)]">Candidate</div>
@@ -148,28 +146,18 @@ export default function VotePage() {
       )}
 
       <div className="mt-10 flex items-center justify-between gap-4">
-        <button
-          onClick={prev}
-          disabled={stepIndex === 0}
-          data-testid="vote-prev-btn"
-          className="h-14 px-6 rounded-2xl border-2 border-[rgba(15,60,138,0.15)] bg-white font-bold flex items-center gap-2 disabled:opacity-40"
-        >
+        <button onClick={prev} disabled={stepIndex === 0} data-testid="vote-prev-btn"
+          className="h-14 px-6 rounded-2xl border-2 border-[rgba(15,60,138,0.15)] bg-white font-bold flex items-center gap-2 disabled:opacity-40">
           <ArrowLeft className="w-5 h-5" /> Previous
         </button>
         <div className="hidden sm:flex items-center gap-2">
-          {POST_ORDER.map((p, i) => (
-            <div
-              key={p}
-              className={`w-2.5 h-2.5 rounded-full ${i < stepIndex ? "bg-[color:var(--sdps-gold)]" : i === stepIndex ? "bg-[color:var(--sdps-blue)] scale-125" : "bg-blue-200"} transition`}
-            />
+          {posts.map((p, i) => (
+            <div key={p.key}
+              className={`w-2.5 h-2.5 rounded-full ${i < stepIndex ? "bg-[color:var(--sdps-gold)]" : i === stepIndex ? "bg-[color:var(--sdps-blue)] scale-125" : "bg-blue-200"} transition`} />
           ))}
         </div>
-        <button
-          onClick={next}
-          disabled={!selected || submitting}
-          data-testid="vote-next-btn"
-          className="btn-primary-3d h-14 px-7 rounded-2xl font-bold flex items-center gap-2 disabled:opacity-40"
-        >
+        <button onClick={next} disabled={!selected || submitting} data-testid="vote-next-btn"
+          className="btn-primary-3d h-14 px-7 rounded-2xl font-bold flex items-center gap-2 disabled:opacity-40">
           {stepIndex === total - 1 ? (submitting ? "Submitting..." : "Submit Ballot") : "Next"} <ArrowRight className="w-5 h-5" />
         </button>
       </div>

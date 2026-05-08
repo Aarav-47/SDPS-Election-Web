@@ -119,22 +119,29 @@ body {
   background: linear-gradient(135deg, #FFFDF5 0%, #FFFFFF 100%);
 }
 
-/* Gold gradient text */
+/* Gold gradient text - high contrast, with subtle dark stroke for legibility */
 .gold-text {
-  background: linear-gradient(135deg, #B9892B 0%, #D4AF37 40%, #F4D571 60%, #B9892B 100%);
+  background: linear-gradient(135deg, #8a6212 0%, #B9892B 30%, #D4AF37 55%, #8a6212 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 1px 0 rgba(255,255,255,0.6))
+    drop-shadow(0 2px 0 rgba(122, 86, 19, 0.45))
+    drop-shadow(0 8px 18px rgba(212, 175, 55, 0.35));
 }
 
-/* Blue 3D heading */
+/* Blue 3D heading - readable, with crisp shadow */
 .hero-3d {
-  background: linear-gradient(180deg, #1c4cb0 0%, #0F3C8A 60%, #0A2A66 100%);
+  color: #0A2A66;
+  background: linear-gradient(180deg, #1c4cb0 0%, #0F3C8A 50%, #07204f 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.45);
-  filter: drop-shadow(0 8px 24px rgba(15, 60, 138, 0.18));
+  filter:
+    drop-shadow(0 1px 0 rgba(255,255,255,0.7))
+    drop-shadow(0 2px 0 rgba(15, 60, 138, 0.25))
+    drop-shadow(0 10px 22px rgba(15, 60, 138, 0.30));
 }
 
 /* Primary CTA */
