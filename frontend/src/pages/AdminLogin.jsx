@@ -31,9 +31,9 @@ export default function AdminLogin() {
 const redirect = params.get("redirect");
 
 if (redirect) {
-  navigate(`/${redirect}`);
+  window.location.href = `/${redirect}`;
 } else {
-  navigate("/admin");
+  window.location.href = "/admin";
 }
     } catch (err) {
       toast.error(
