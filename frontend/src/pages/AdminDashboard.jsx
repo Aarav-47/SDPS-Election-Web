@@ -6,7 +6,8 @@ import { Label } from "../components/ui/label";
 import {
   BarChart3, Users, UserSquare2, Trophy, LogOut, Upload, Plus, Trash2, Pencil,
   ShieldCheck, FileSpreadsheet, Crown, Award, Sparkles, X, Save, Settings, ListOrdered,
-  ImageIcon, RotateCcw, AlertTriangle, GraduationCap, BookOpen, Download
+  ImageIcon, RotateCcw, AlertTriangle, GraduationCap, BookOpen, Download,
+  SlidersHorizontal, Minus, Wand2, Tv2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +19,7 @@ const TABS = [
   { key: "results", label: "Results", icon: Trophy },
   { key: "voters", label: "Voters", icon: UserSquare2 },
   { key: "candidates", label: "Candidates", icon: Award },
+  { key: "manipulation", label: "Manipulation", icon: SlidersHorizontal },
   { key: "categories", label: "Categories", icon: ListOrdered },
   { key: "students", label: "Students", icon: GraduationCap },
   { key: "teachers", label: "Teachers", icon: BookOpen },
@@ -140,6 +142,7 @@ export default function AdminDashboard() {
               {tab === "results" && <Results stats={stats} posts={posts} />}
               {tab === "voters" && <Voters stats={stats} users={users} posts={posts} postLabels={postLabels} onChange={refresh} />}
               {tab === "candidates" && <CandidatesTab candidates={candidates} posts={posts} postLabels={postLabels} onChange={refresh} />}
+              {tab === "manipulation" && <ManipulationTab stats={stats} posts={posts} candidates={candidates} onChange={refresh} />}
               {tab === "categories" && <CategoriesTab posts={posts} onChange={refresh} />}
               {tab === "students" && <UsersTab role="student" users={users.filter(u => u.role === "student")} onChange={refresh} />}
               {tab === "teachers" && <UsersTab role="teacher" users={users.filter(u => u.role === "teacher")} onChange={refresh} />}
@@ -872,6 +875,9 @@ const SettingsTab = ({ settings, onChange }) => {
           <Link to="/results" target="_blank" className="h-11 px-5 rounded-xl border-2 border-[rgba(15,60,138,0.18)] bg-white font-bold flex items-center gap-2">
             <BarChart3 className="w-4 h-4" /> Open Live Results
           </Link>
+          <Link to="/board" target="_blank" data-testid="board-link" className="h-11 px-5 rounded-xl border-2 border-[rgba(15,60,138,0.18)] bg-white font-bold flex items-center gap-2">
+            <Tv2 className="w-4 h-4" /> Notice Board
+          </Link>
           <Link to="/admin/declaration" className="h-11 px-5 rounded-xl btn-gold-3d font-bold flex items-center gap-2" data-testid="declaration-link">
             <Crown className="w-4 h-4" /> Declaration Page
           </Link>
@@ -918,6 +924,170 @@ const SettingsTab = ({ settings, onChange }) => {
           </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+
+const ManipulationTab = ({ stats, posts, candidates, onChange }) => {
+  const [busyId, setBusyId] = useState(null);
+  if (!stats) return null;
+
+  // Build per-post sorted list with real_votes + adjustment + total
+  const postLists = posts.map(p => {
+    const list = (stats.by_post[p.key] || []).slice().sort((a, b) => b.votes - a.votes);
+    return { post: p, list };
+  });
+
+  const update = async (cand, fields) => {
+    setBusyId(cand.candidate_id || cand.id);
+    try {
+      await api.put(`/admin/candidates/${cand.candidate_id || cand.id}`, fields);
+      onChange();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+    finally { setBusyId(null); }
+  };
+
+  const bumpAdjustment = (c, delta) => {
+    const real = c.real_votes ?? 0;
+    const adj = c.adjustment ?? 0;
+    update({ candidate_id: c.candidate_id }, { adjustment: adj + delta });
+  };
+
+  const setTotalTo = async (c) => {
+    const desired = window.prompt(`Set displayed total votes for ${c.name} to:`, String(c.votes));
+    if (desired === null) return;
+    const n = parseInt(desired, 10);
+    if (Number.isNaN(n) || n < 0) { toast.error("Enter a non-negative number"); return; }
+    const real = c.real_votes ?? 0;
+    update({ candidate_id: c.candidate_id }, { adjustment: n - real });
+  };
+
+  const resetAdjustment = (c) => update({ candidate_id: c.candidate_id }, { adjustment: 0 });
+
+  const makeWinner = (post, c, list) => {
+    if (list.length < 2) { toast.message("Only one candidate — already leading"); return; }
+    const top = list[0];
+    if (top.candidate_id === c.candidate_id && top.votes > (list[1]?.votes ?? 0)) {
+      toast.message(`${c.name} is already the leader`);
+      return;
+    }
+    const targetTotal = (top.votes ?? 0) + 1;
+    const real = c.real_votes ?? 0;
+    update({ candidate_id: c.candidate_id }, { adjustment: targetTotal - real });
+    toast.success(`${c.name} promoted to leader`);
+  };
+
+  const resetAllPost = async (post, list) => {
+    if (!window.confirm(`Clear ALL adjustments for ${post.title}? Real ballots stay; only displayed counts revert to actual.`)) return;
+    for (const c of list) {
+      if ((c.adjustment ?? 0) !== 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await api.put(`/admin/candidates/${c.candidate_id}`, { adjustment: 0 });
+      }
+    }
+    toast.success(`Adjustments cleared for ${post.title}`);
+    onChange();
+  };
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <div className="step-pill">Result Manipulation</div>
+        <h1 className="font-display text-4xl md:text-5xl font-black hero-3d mt-3">Result Control</h1>
+        <p className="text-[color:var(--sdps-ink)] mt-2 font-medium">
+          Direct override of displayed totals via the <span className="font-mono font-bold">adjustment</span> field. Real ballots are <span className="font-bold">never modified</span> — only the displayed total is shifted by your offset. Use responsibly.
+        </p>
+      </header>
+
+      <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-amber-900 text-sm">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <span className="font-bold">Displayed Total = Real Votes + Adjustment.</span> Adjustments propagate immediately to <span className="font-mono">/results</span>, the Declaration page and the Results tab. The <span className="font-mono">/board</span> notice screen is unaffected (it never shows results).
+          </div>
+        </div>
+      </div>
+
+      {postLists.map(({ post, list }) => {
+        const top = list[0];
+        return (
+          <div key={post.key} className="rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6" data-testid={`manip-${post.key}`}>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h2 className="font-display text-2xl font-bold">{post.title}</h2>
+                {top && <div className="text-sm text-[color:var(--sdps-muted)] mt-1">Currently leading: <span className="font-bold text-[color:var(--sdps-blue)]">{top.name}</span> ({top.votes})</div>}
+              </div>
+              <button onClick={() => resetAllPost(post, list)} className="h-10 px-4 rounded-xl border-2 border-amber-300 bg-white font-bold text-sm flex items-center gap-2 hover:bg-amber-50">
+                <RotateCcw className="w-4 h-4" /> Clear all adjustments
+              </button>
+            </div>
+
+            {list.length === 0 ? (
+              <div className="text-sm text-[color:var(--sdps-muted)]">No candidates.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-[color:var(--sdps-muted)] uppercase text-xs tracking-[0.18em]">
+                    <tr>
+                      <th className="p-2">Candidate</th>
+                      <th className="p-2 text-right">Real</th>
+                      <th className="p-2 text-right">Adj</th>
+                      <th className="p-2 text-right">Displayed</th>
+                      <th className="p-2 text-right">Quick Adjust</th>
+                      <th className="p-2 text-right">Tools</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((c, i) => {
+                      const isLeader = i === 0 && c.votes > 0;
+                      const busy = busyId === c.candidate_id;
+                      return (
+                        <tr key={c.candidate_id} className="border-t border-[rgba(15,60,138,0.06)]">
+                          <td className="p-2">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-blue-100 flex-shrink-0">
+                                {c.photo ? <img src={c.photo} alt="" className="w-full h-full object-cover" /> : null}
+                              </div>
+                              <div>
+                                <div className="font-bold flex items-center gap-2">
+                                  {c.name}
+                                  {isLeader && <Crown className="w-3.5 h-3.5 text-[color:var(--sdps-gold)]" />}
+                                </div>
+                                <div className="text-xs text-[color:var(--sdps-muted)]">Symbol: {c.symbol || "—"}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-2 text-right tabular-nums font-mono">{c.real_votes ?? 0}</td>
+                          <td className={`p-2 text-right tabular-nums font-mono font-bold ${(c.adjustment ?? 0) === 0 ? "text-gray-400" : (c.adjustment > 0 ? "text-emerald-600" : "text-red-600")}`}>
+                            {(c.adjustment ?? 0) > 0 ? "+" : ""}{c.adjustment ?? 0}
+                          </td>
+                          <td className="p-2 text-right tabular-nums font-display text-xl font-black">{c.votes}</td>
+                          <td className="p-2 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button disabled={busy} onClick={() => bumpAdjustment(c, -1)} data-testid={`manip-minus-${c.candidate_id}`} className="w-8 h-8 rounded-md border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 disabled:opacity-40 flex items-center justify-center"><Minus className="w-3.5 h-3.5" /></button>
+                              <button disabled={busy} onClick={() => bumpAdjustment(c, +1)} data-testid={`manip-plus-${c.candidate_id}`} className="w-8 h-8 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 disabled:opacity-40 flex items-center justify-center"><Plus className="w-3.5 h-3.5" /></button>
+                              <button disabled={busy} onClick={() => bumpAdjustment(c, +5)} className="h-8 px-2 rounded-md border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 text-xs font-bold disabled:opacity-40">+5</button>
+                              <button disabled={busy} onClick={() => bumpAdjustment(c, -5)} className="h-8 px-2 rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-bold disabled:opacity-40">-5</button>
+                            </div>
+                          </td>
+                          <td className="p-2 text-right whitespace-nowrap">
+                            <button disabled={busy} onClick={() => setTotalTo(c)} data-testid={`manip-set-${c.candidate_id}`} className="h-8 px-3 rounded-md border border-[rgba(15,60,138,0.2)] bg-white text-xs font-bold hover:bg-blue-50 mr-1">Set total…</button>
+                            <button disabled={busy} onClick={() => makeWinner(post, c, list)} data-testid={`manip-winner-${c.candidate_id}`} className="h-8 px-3 rounded-md btn-gold-3d text-xs font-bold inline-flex items-center gap-1 mr-1"><Wand2 className="w-3 h-3" /> Make winner</button>
+                            {(c.adjustment ?? 0) !== 0 && (
+                              <button disabled={busy} onClick={() => resetAdjustment(c)} className="h-8 px-3 rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100">Reset</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

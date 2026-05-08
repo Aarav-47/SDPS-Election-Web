@@ -461,6 +461,51 @@ async def delete_candidate(cid: str, _: str = Depends(verify_admin)):
 
 
 # ---------- Public Live Results ----------
+@api.get("/board")
+async def public_board():
+    """Notice-board endpoint: turnout only, NO result/candidate data leaks."""
+    posts = await db.posts.find({}, {"_id": 0}).sort("order", 1).to_list(1000)
+    votes = await db.votes.find({}, {"_id": 0, "admission_no": 1, "voter_role": 1, "voter_class": 1, "timestamp": 1}).to_list(20000)
+    total_users = await db.users.count_documents({})
+    total_students = await db.users.count_documents({"role": "student"})
+    total_teachers = await db.users.count_documents({"role": "teacher"})
+    voted_set = {v["admission_no"] for v in votes}
+
+    # class breakdown (students)
+    class_groups: Dict[str, Dict[str, int]] = {}
+    async for u in db.users.find({"role": "student"}, {"_id": 0}):
+        cls = u.get("class_name") or "Unassigned"
+        g = class_groups.setdefault(cls, {"class_name": cls, "total": 0, "voted": 0})
+        g["total"] += 1
+        if u["admission_no"] in voted_set:
+            g["voted"] += 1
+    class_breakdown = sorted(class_groups.values(), key=lambda x: x["class_name"])
+
+    voted_students = sum(1 for v in votes if v.get("voter_role") == "student")
+    voted_teachers = sum(1 for v in votes if v.get("voter_role") == "teacher")
+
+    s = await db.settings.find_one({"key": "election_open"}, {"_id": 0})
+    election_open = str((s or {}).get("value", "true")).lower() != "false"
+
+    last_ts = max((v.get("timestamp", "") for v in votes), default="")
+
+    return {
+        "election_open": election_open,
+        "categories_count": len(posts),
+        "total_users": total_users,
+        "total_students": total_students,
+        "total_teachers": total_teachers,
+        "total_voted": len(votes),
+        "voted_students": voted_students,
+        "voted_teachers": voted_teachers,
+        "pending": max(0, total_users - len(votes)),
+        "turnout_pct": round((len(votes) / total_users * 100), 1) if total_users else 0,
+        "class_breakdown": class_breakdown,
+        "last_vote_at": last_ts,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @api.get("/results")
 async def public_results():
     posts = await db.posts.find({}, {"_id": 0}).sort("order", 1).to_list(1000)

@@ -212,3 +212,59 @@ class TestElectionLock:
         r2 = s.post(f"{BASE_URL}/api/votes",
                     json=_full_ballot(s, "SDPSS003"))
         assert r2.status_code == 200, r2.text
+
+
+
+# ---------------- Iteration 4: Public /api/board (turnout-only) ----------------
+class TestPublicBoard:
+    LEAK_KEYS = {"by_post", "winners", "candidates", "results"}
+
+    def test_board_no_auth_and_shape(self, s):
+        r = requests.get(f"{BASE_URL}/api/board")  # no auth
+        assert r.status_code == 200, r.text
+        d = r.json()
+        for k in (
+            "election_open", "total_users", "total_students", "total_teachers",
+            "total_voted", "voted_students", "voted_teachers", "pending",
+            "turnout_pct", "class_breakdown", "categories_count",
+            "last_vote_at", "updated_at",
+        ):
+            assert k in d, f"missing {k}"
+        # No result/candidate leaks
+        leaks = self.LEAK_KEYS.intersection(d.keys())
+        assert not leaks, f"board leaks result data: {leaks}"
+        # class_breakdown shape
+        assert isinstance(d["class_breakdown"], list)
+        for c in d["class_breakdown"]:
+            assert {"class_name", "total", "voted"}.issubset(c.keys())
+        # totals sane
+        assert d["total_users"] == d["total_students"] + d["total_teachers"]
+        assert d["pending"] == max(0, d["total_users"] - d["total_voted"])
+
+    def test_board_increments_when_vote_cast(self, s, admin):
+        # clean baseline
+        admin.post(f"{BASE_URL}/api/admin/reset/votes")
+        before = s.get(f"{BASE_URL}/api/board").json()
+        # find SDPSS001's class
+        u1 = s.get(f"{BASE_URL}/api/users/SDPSS001").json()
+        cls = u1["class_name"]
+        cls_before = next((c for c in before["class_breakdown"] if c["class_name"] == cls), None)
+        assert cls_before is not None
+
+        r = s.post(f"{BASE_URL}/api/votes", json=_full_ballot(s, "SDPSS001"))
+        assert r.status_code == 200, r.text
+
+        after = s.get(f"{BASE_URL}/api/board").json()
+        assert after["total_voted"] == before["total_voted"] + 1
+        assert after["voted_students"] == before["voted_students"] + 1
+        assert after["voted_teachers"] == before["voted_teachers"]
+        cls_after = next(c for c in after["class_breakdown"] if c["class_name"] == cls)
+        assert cls_after["voted"] == cls_before["voted"] + 1
+        assert cls_after["total"] == cls_before["total"]
+        assert after["last_vote_at"]  # non-empty
+        assert after["pending"] == before["pending"] - 1
+
+    def test_board_categories_count_matches_posts(self, s):
+        d = s.get(f"{BASE_URL}/api/board").json()
+        posts = s.get(f"{BASE_URL}/api/posts").json()
+        assert d["categories_count"] == len(posts)

@@ -10,6 +10,7 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import LiveResults from "./pages/LiveResults";
 import Declaration from "./pages/Declaration";
+import NoticeBoard from "./pages/NoticeBoard";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/vote" element={<VotePage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
           <Route path="/results" element={<LiveResults />} />
+          <Route path="/board" element={<NoticeBoard />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/declaration" element={<Declaration />} />
