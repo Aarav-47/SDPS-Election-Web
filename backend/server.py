@@ -23,7 +23,7 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-JWT_SECRET = os.environ.get('JWT_SECRET', 'sdps-election-secret-key-2026')
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGO = 'HS256'
 
 DEFAULT_POSTS = [
