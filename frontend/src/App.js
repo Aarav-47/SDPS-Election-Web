@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/react";
 import { VoteProvider } from "./context/VoteContext";
 import AuthPage from "./pages/AuthPage";
 import ConfirmPage from "./pages/ConfirmPage";
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/admin/declaration" element={<Declaration />} />
         </Routes>
         <Toaster position="top-center" richColors closeButton />
+        <Analytics />
       </VoteProvider>
     </BrowserRouter>
   );
