@@ -1,0 +1,120 @@
+{
+  "project_name": "SDPS Student Council Election",
+  "theme": "Light",
+  "archetype": "4 - Swiss & High-Contrast (Prestigious Institution Hybrid)",
+  "aesthetic": "3D gradiental style with white, royal blue, and metallic gold accents. Clean, official, celebratory.",
+  "colors": {
+    "primary": "#0F3C8A",
+    "primary_hover": "#164B9A",
+    "accent_gold": "#D4AF37",
+    "accent_gold_glow": "#F3E5AB",
+    "background_base": "#F8F9FA",
+    "surface_white": "#FFFFFF",
+    "text_main": "#0A1128",
+    "text_muted": "#5C6A82",
+    "success": "#22C55E",
+    "danger": "#EF4444",
+    "border_subtle": "rgba(15, 60, 138, 0.1)",
+    "3d_gradient_css": "radial-gradient(circle at 10% 20%, rgba(15, 60, 138, 0.05) 0%, transparent 90%), radial-gradient(circle at 90% 80%, rgba(212, 175, 55, 0.08) 0%, transparent 90%)"
+  },
+  "typography": {
+    "font_families": {
+      "headings": "Cabinet Grotesk, sans-serif",
+      "body": "Outfit, sans-serif"
+    },
+    "hierarchy": {
+      "h1_hero": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-black text-primary",
+      "h2_section": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
+      "h3_card": "text-xl sm:text-2xl font-bold",
+      "body": "text-lg md:text-xl leading-relaxed",
+      "labels": "text-sm tracking-[0.2em] uppercase font-bold text-muted"
+    }
+  },
+  "spacing_and_layout": {
+    "kiosk_voting_flow": {
+      "strategy": "Single task per screen (1 contest at a time). Massive touch targets.",
+      "container": "max-w-4xl mx-auto px-6 py-12 min-h-screen flex flex-col justify-center",
+      "grid": "grid-cols-1 md:grid-cols-2 gap-8 md:gap-12",
+      "alignment": "Center-aligned headers, left-aligned candidate details to support scanning."
+    },
+    "admin_dashboard": {
+      "strategy": "High density, control-room layout.",
+      "container": "w-full p-8",
+      "grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "cards": "col-span-1 for summaries, col-span-2 or 3 for charts."
+    }
+  },
+  "components": {
+    "kiosk": {
+      "candidate_card": "Glassmorphism surface: bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl rounded-3xl p-6. Hover/Active: scale-105 ring-4 ring-accent_gold transition-all duration-300.",
+      "progress_bar": "Thick (h-4) rounded-full bg-blue-100, indicator bg-gradient-to-r from-primary to-accent_gold.",
+      "buttons": "Large (h-16), rounded-2xl, text-xl font-bold. Primary: bg-primary text-white hover:bg-primary_hover shadow-lg. CTA: bg-gradient-to-r from-accent_gold to-yellow-500 text-text_main.",
+      "inputs": "Oversized, h-16, text-center text-3xl tracking-widest for Admission Number. Use Shadcn Input customized."
+    },
+    "admin_dashboard": {
+      "cards": "Solid flat bg-white, 1px subtle border-border_subtle, rounded-xl. No heavy shadows.",
+      "tables": "Shadcn Table, dense padding, alternating row colors (bg-gray-50/50).",
+      "charts": "Recharts Bar/Pie charts using primary and accent_gold colors."
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Used on Kiosk screens to let the 3D gradient background bleed through slightly. Requires backdrop-saturate-150 and backdrop-blur-2xl.",
+    "neumorphism_touches": "Use 1px inner solid white borders (border-white/60) on cards to give a 3D bevel effect.",
+    "shadows": "Ambient colored shadows: shadow-[0_8px_32px_rgba(15,60,138,0.12)] for cards."
+  },
+  "motion_and_interactions": {
+    "page_transitions": "Framer Motion: fade in and slide up (y: 20 -> 0, opacity: 0 -> 1) with spring physics.",
+    "selection_feedback": "Instant haptic-style visual pop. When candidate selected, card border turns Gold, checkmark icon scales in.",
+    "hover_states": "All buttons must lift slightly (-translate-y-1) and increase shadow. Text color must remain WCAG compliant.",
+    "accessibility": "Respect prefers-reduced-motion. High contrast focus rings (focus:ring-4 focus:ring-primary focus:ring-offset-2)."
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure white text on Royal Blue passes APCA. Dark text on White passes.",
+    "touch_targets": "Minimum 48x48px on all interactive elements in Kiosk mode.",
+    "data_testids": [
+      "auth-admission-input",
+      "auth-submit-btn",
+      "confirm-identity-btn",
+      "vote-candidate-card-id",
+      "vote-next-btn",
+      "admin-login-btn",
+      "dashboard-stats-card",
+      "upload-excel-btn"
+    ]
+  },
+  "media": {
+    "logos": {
+      "school_crest": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/652849ae-ea92-4c52-9e18-aea99c609f29/images/5b8c8cea28618480f286dd1b242e81d98a5c0924b532d9070bb509a63d4ff568.png",
+        "usage": "Top center of Kiosk auth and Thank You screens. Admin dashboard sidebar."
+      }
+    },
+    "candidate_placeholders": [
+      {
+        "url": "https://images.unsplash.com/photo-1693162274256-6bfe792b05e2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHw0fHxoaWdoJTIwc2Nob29sJTIwc3R1ZGVudCUyMHByb2Zlc3Npb25hbCUyMHBvcnRyYWl0JTIwc3R1ZGlvfGVufDB8fHx8MTc3ODIzNTY0NXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Candidate 1 photo"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1514960919797-5ff58c52e5ba?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwzfHxoaWdoJTIwc2Nob29sJTIwc3R1ZGVudCUyMHByb2Zlc3Npb25hbCUyMHBvcnRyYWl0JTIwc3R1ZGlvfGVufDB8fHx8MTc3ODIzNTY0NXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Candidate 2 photo"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1578390431312-f9ffd91de51b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxoaWdoJTIwc2Nob29sJTIwc3R1ZGVudCUyMHByb2Zlc3Npb25hbCUyMHBvcnRyYWl0JTIwc3R1ZGlvfGVufDB8fHx8MTc3ODIzNTY0NXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Candidate 3 photo"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1596875422535-4267bf9495e0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwyfHxoaWdoJTIwc2Nob29sJTIwc3R1ZGVudCUyMHByb2Zlc3Npb25hbCUyMHBvcnRyYWl0JTIwc3R1ZGlvfGVufDB8fHx8MTc3ODIzNTY0NXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Candidate 4 photo"
+      }
+    ],
+    "icons_library": "lucide-react (for UI elements), custom SVG or Phosphor icons for election symbols (e.g. Star, Sun, Book, Tree)."
+  },
+  "instructions_to_main_agent": {
+    "architecture": "Build two distinct layouts: 1) Kiosk Layout (no nav bar, immersive full-screen, 3D CSS mesh gradient background, single-flow steps). 2) Admin Dashboard Layout (sidebar navigation, flat white background, high-density data tables).",
+    "state_management": "Use React state/context for the voting flow. The flow is: Auth -> Identity Confirm -> Head Boy -> Head Girl -> Sports Skipper -> Cultural Head -> Discipline Head -> Thank You.",
+    "css_implementation": "To achieve the '3D gradiental' style without heavy WebGL, use complex CSS radial gradients on the Kiosk wrapper: bg-[radial-gradient(circle_at_top_left,_var(--tw-gradient-stops))] from-blue-50 via-white to-blue-100. Add floating orbs using absolute positioned divs with blur-3xl in primary blue and gold.",
+    "dependencies": "Install framer-motion, recharts (for admin dashboard), lucide-react, clsx, tailwind-merge, xlsx (for parsing excel uploads). Use Shadcn for standard components but strip borders/shadows for Kiosk in favor of Glassmorphism.",
+    "testing": "Ensure EVERY button and input has the specified data-testid for end-to-end testing.",
+    "backend_storage": "User explicitly requested 'local database, we don't host it on any online server'. Implement the backend with Python FastAPI + SQLite to store data locally on the host machine. Ensure Admin Dashboard has candidate CRUD (with local file upload or URL) and Excel upload functionality for student records."
+  }
+}
