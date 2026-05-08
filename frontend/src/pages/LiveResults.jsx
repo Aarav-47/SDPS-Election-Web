@@ -13,7 +13,7 @@ useEffect(() => {
 
   if (!token) {
 
-    navigate("/admin");
+navigate("/admin?redirect=results");
 
   }
 
