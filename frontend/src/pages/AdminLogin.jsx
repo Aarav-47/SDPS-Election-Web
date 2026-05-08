@@ -19,11 +19,14 @@ export default function AdminLogin() {
       localStorage.setItem("sdps_admin_token", data.token);
       localStorage.setItem("sdps_admin_user", data.username);
       toast.success("Welcome, " + data.username);
-      navigate("/admin");
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Invalid credentials");
-    } finally { setLoading(false); }
-  };
+const params = new URLSearchParams(window.location.search);
+const redirect = params.get("redirect");
+
+if (redirect === "results") {
+  navigate("/results");
+} else {
+  navigate("/admin");
+}
 
   return (
     <div className="kiosk-bg min-h-screen flex items-center justify-center p-6">
