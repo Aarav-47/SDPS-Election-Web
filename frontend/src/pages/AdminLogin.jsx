@@ -18,8 +18,21 @@ export default function AdminLogin() {
       const { data } = await api.post("/admin/login", { username: u, password: p });
       localStorage.setItem("sdps_admin_token", data.token);
       localStorage.setItem("sdps_admin_user", data.username);
-      toast.success("Welcome, " + data.username);
-      navigate("/admin");
+     toast.success("Welcome, " + data.username);
+
+const params = new URLSearchParams(window.location.search);
+
+const redirect = params.get("redirect");
+
+if (redirect) {
+
+  navigate(`/${redirect}`);
+
+} else {
+
+  navigate("/admin");
+
+}
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Invalid credentials");
     } finally { setLoading(false); }
