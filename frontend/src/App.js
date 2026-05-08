@@ -8,6 +8,8 @@ import VotePage from "./pages/VotePage";
 import ThankYouPage from "./pages/ThankYouPage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import LiveResults from "./pages/LiveResults";
+import Declaration from "./pages/Declaration";
 
 export default function App() {
   return (
@@ -18,8 +20,10 @@ export default function App() {
           <Route path="/confirm" element={<ConfirmPage />} />
           <Route path="/vote" element={<VotePage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
+          <Route path="/results" element={<LiveResults />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/declaration" element={<Declaration />} />
         </Routes>
         <Toaster position="top-center" richColors closeButton />
       </VoteProvider>

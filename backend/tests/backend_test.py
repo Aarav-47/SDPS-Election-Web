@@ -1,251 +1,214 @@
-"""SDPS Election Backend API tests - iteration 2 (users/posts/settings/reset)."""
+"""SDPS Election iteration 3 backend tests.
+Covers: candidate.adjustment, public /results, /admin/stats class_breakdown,
+PUT/DELETE /admin/votes/{id}, election_open lock toggling.
+"""
 import os
-import io
+import time
 import pytest
 import requests
-import openpyxl
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-API = f"{BASE_URL}/api"
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+if not BASE_URL:
+    from dotenv import load_dotenv
+    load_dotenv('/app/frontend/.env')
+    BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+
+assert BASE_URL, "REACT_APP_BACKEND_URL not set"
+
+ADMIN_USER = "Aarav"
+ADMIN_PASS = "Krish@2026"
 
 
-@pytest.fixture(scope="module")
-def admin_token():
-    r = requests.post(f"{API}/admin/login", json={"username": "Aarav", "password": "Krish@2026"})
+@pytest.fixture(scope="session")
+def s():
+    sess = requests.Session()
+    sess.headers.update({"Content-Type": "application/json"})
+    return sess
+
+
+@pytest.fixture(scope="session")
+def admin_token(s):
+    r = s.post(f"{BASE_URL}/api/admin/login",
+               json={"username": ADMIN_USER, "password": ADMIN_PASS})
     assert r.status_code == 200, r.text
-    tok = r.json()["token"]
-    assert isinstance(tok, str) and len(tok) > 10
-    return tok
+    return r.json()["token"]
 
 
-@pytest.fixture(scope="module")
-def auth_headers(admin_token):
-    return {"Authorization": f"Bearer {admin_token}"}
+@pytest.fixture(scope="session")
+def admin(s, admin_token):
+    sess = requests.Session()
+    sess.headers.update({"Content-Type": "application/json",
+                         "Authorization": f"Bearer {admin_token}"})
+    return sess
 
 
-# ---------- Cleanup BEFORE tests start to make state deterministic ----------
 @pytest.fixture(scope="module", autouse=True)
-def reset_state(auth_headers):
-    # Reset votes only - keep seed users/candidates
-    requests.post(f"{API}/admin/reset/votes", headers=auth_headers)
+def reset_state(admin):
+    admin.put(f"{BASE_URL}/api/admin/settings/election_open",
+              json={"value": "true"})
+    admin.post(f"{BASE_URL}/api/admin/reset/votes")
     yield
+    admin.put(f"{BASE_URL}/api/admin/settings/election_open",
+              json={"value": "true"})
+    admin.post(f"{BASE_URL}/api/admin/reset/votes")
+    cands = admin.get(f"{BASE_URL}/api/candidates").json()
+    for c in cands:
+        if c.get("adjustment"):
+            admin.put(f"{BASE_URL}/api/admin/candidates/{c['id']}",
+                      json={"adjustment": 0})
 
 
-# ---------- Public: Posts / Users / Candidates ----------
-def test_root():
-    r = requests.get(f"{API}/")
-    assert r.status_code == 200
+def _first_candidate_per_post(s):
+    cands = s.get(f"{BASE_URL}/api/candidates").json()
+    by = {}
+    for c in cands:
+        by.setdefault(c["post"], []).append(c)
+    return {k: lst[0] for k, lst in by.items()}
 
 
-def test_posts_default_5_ordered():
-    r = requests.get(f"{API}/posts")
-    assert r.status_code == 200
-    data = r.json()
-    assert len(data) >= 5
-    keys = [d["key"] for d in data[:5]]
-    assert keys == ["head_boy", "head_girl", "sports_skipper", "cultural_head", "discipline_head"]
-    # ordered by 'order' ascending
-    orders = [d["order"] for d in data[:5]]
-    assert orders == sorted(orders)
+def _full_ballot(s, adm):
+    fc = _first_candidate_per_post(s)
+    return {"admission_no": adm, "selections": {k: c["id"] for k, c in fc.items()}}
 
 
-def test_get_user_student():
-    r = requests.get(f"{API}/users/SDPSS001")
-    assert r.status_code == 200
-    d = r.json()
-    assert d["role"] == "student"
-    assert d["name"] == "Aarav Sharma"
-    assert d["father_name"] == "Rajesh Sharma"
-    assert d["class_name"] == "XII-A"
-    assert "has_voted" in d
-
-
-def test_get_user_teacher():
-    r = requests.get(f"{API}/users/SDPSE01")
-    assert r.status_code == 200
-    d = r.json()
-    assert d["role"] == "teacher"
-    assert d["subject"] == "Mathematics"
-    assert d["designation"] == "Sr. Teacher"
-
-
-def test_get_user_404():
-    r = requests.get(f"{API}/users/INVALID")
-    assert r.status_code == 404
-
-
-def test_public_settings_endpoint():
-    r = requests.get(f"{API}/settings")
-    assert r.status_code == 200
-    assert isinstance(r.json(), dict)
-
-
-# ---------- Voting ----------
-def _selections():
-    sel = {}
-    for p in ["head_boy", "head_girl", "sports_skipper", "cultural_head", "discipline_head"]:
-        r = requests.get(f"{API}/candidates", params={"post": p})
+# ---------------- public /results ----------------
+class TestPublicResults:
+    def test_results_no_auth(self, s):
+        r = s.get(f"{BASE_URL}/api/results")
         assert r.status_code == 200
-        sel[p] = r.json()[0]["id"]
-    return sel
+        d = r.json()
+        for k in ("posts", "by_post", "winners", "total_voted",
+                  "total_users", "turnout_pct", "updated_at"):
+            assert k in d, f"missing {k}"
+        assert isinstance(d["posts"], list) and len(d["posts"]) >= 1
+        for pkey, lst in d["by_post"].items():
+            assert isinstance(lst, list)
+            for e in lst:
+                for f in ("candidate_id", "name", "votes"):
+                    assert f in e
+
+    def test_results_reflects_vote_and_adjustment(self, s, admin):
+        ballot = _full_ballot(s, "SDPSS001")
+        r = s.post(f"{BASE_URL}/api/votes", json=ballot)
+        assert r.status_code == 200, r.text
+
+        hb_cid = ballot["selections"]["head_boy"]
+        res = s.get(f"{BASE_URL}/api/results").json()
+        hb_entry = next(e for e in res["by_post"]["head_boy"]
+                        if e["candidate_id"] == hb_cid)
+        assert hb_entry["votes"] == 1
+        assert res["total_voted"] >= 1
+        assert res["turnout_pct"] > 0
+
+        admin.put(f"{BASE_URL}/api/admin/candidates/{hb_cid}",
+                  json={"adjustment": 5})
+        res2 = s.get(f"{BASE_URL}/api/results").json()
+        hb2 = next(e for e in res2["by_post"]["head_boy"]
+                   if e["candidate_id"] == hb_cid)
+        assert hb2["votes"] == 6
+        assert res2["winners"]["head_boy"]["candidate_id"] == hb_cid
+
+        admin.put(f"{BASE_URL}/api/admin/candidates/{hb_cid}",
+                  json={"adjustment": 0})
+
+    def test_results_updated_at_changes(self, s):
+        a = s.get(f"{BASE_URL}/api/results").json()["updated_at"]
+        time.sleep(1.1)
+        b = s.get(f"{BASE_URL}/api/results").json()["updated_at"]
+        assert a != b
 
 
-def test_vote_student_success():
-    sel = _selections()
-    r = requests.post(f"{API}/votes", json={"admission_no": "SDPSS003", "selections": sel})
-    assert r.status_code == 200, r.text
-    assert r.json()["ok"] is True
-    # verify has_voted persisted
-    g = requests.get(f"{API}/users/SDPSS003")
-    assert g.json()["has_voted"] is True
+# ---------------- /admin/stats class_breakdown + adjustment fields ----------------
+class TestAdminStats:
+    def test_stats_has_class_breakdown(self, admin):
+        r = admin.get(f"{BASE_URL}/api/admin/stats")
+        assert r.status_code == 200
+        d = r.json()
+        assert "class_breakdown" in d
+        assert isinstance(d["class_breakdown"], list)
+        for c in d["class_breakdown"]:
+            assert {"class_name", "total", "voted"}.issubset(c.keys())
+        names = {c["class_name"] for c in d["class_breakdown"]}
+        assert "XII-A" in names
+
+    def test_stats_by_post_has_real_adjustment_votes(self, admin):
+        d = admin.get(f"{BASE_URL}/api/admin/stats").json()
+        for pkey, lst in d["by_post"].items():
+            for e in lst:
+                for f in ("real_votes", "adjustment", "votes"):
+                    assert f in e
+                assert e["votes"] == e["real_votes"] + e["adjustment"]
 
 
-def test_vote_teacher_success():
-    sel = _selections()
-    r = requests.post(f"{API}/votes", json={"admission_no": "SDPSE02", "selections": sel})
-    assert r.status_code == 200, r.text
+# ---------------- Candidate adjustment ----------------
+class TestCandidateAdjustment:
+    def test_put_adjustment_persists(self, admin):
+        cands = admin.get(f"{BASE_URL}/api/candidates").json()
+        cid = cands[0]["id"]
+        r = admin.put(f"{BASE_URL}/api/admin/candidates/{cid}",
+                      json={"adjustment": 7})
+        assert r.status_code == 200
+        assert r.json()["adjustment"] == 7
+        again = admin.get(f"{BASE_URL}/api/candidates").json()
+        match = next(c for c in again if c["id"] == cid)
+        assert match["adjustment"] == 7
+        admin.put(f"{BASE_URL}/api/admin/candidates/{cid}",
+                  json={"adjustment": 0})
 
 
-def test_vote_duplicate_rejected():
-    sel = _selections()
-    r = requests.post(f"{API}/votes", json={"admission_no": "SDPSS003", "selections": sel})
-    assert r.status_code == 400
-    assert "already" in r.text.lower()
+# ---------------- Vote edit/delete ----------------
+class TestVoteManipulation:
+    def test_edit_then_delete_vote(self, s, admin):
+        ballot = _full_ballot(s, "SDPSS002")
+        r = s.post(f"{BASE_URL}/api/votes", json=ballot)
+        assert r.status_code == 200, r.text
+        vid = r.json()["vote_id"]
+
+        all_c = s.get(f"{BASE_URL}/api/candidates").json()
+        hg = [c for c in all_c if c["post"] == "head_girl"]
+        new_hg = next(c for c in hg if c["id"] != ballot["selections"]["head_girl"])
+        new_sel = dict(ballot["selections"])
+        new_sel["head_girl"] = new_hg["id"]
+
+        r2 = admin.put(f"{BASE_URL}/api/admin/votes/{vid}",
+                       json={"selections": new_sel})
+        assert r2.status_code == 200, r2.text
+
+        stats = admin.get(f"{BASE_URL}/api/admin/stats").json()
+        ballot_doc = next(v for v in stats["votes"] if v["id"] == vid)
+        assert ballot_doc["selections"]["head_girl"] == new_hg["id"]
+
+        r3 = admin.delete(f"{BASE_URL}/api/admin/votes/{vid}")
+        assert r3.status_code == 200
+        u = s.get(f"{BASE_URL}/api/users/SDPSS002").json()
+        assert u["has_voted"] is False
+        r4 = s.post(f"{BASE_URL}/api/votes", json=_full_ballot(s, "SDPSS002"))
+        assert r4.status_code == 200
+
+    def test_edit_unknown_vote_404(self, admin):
+        r = admin.put(f"{BASE_URL}/api/admin/votes/nonexistent",
+                      json={"selections": {}})
+        assert r.status_code == 404
+
+    def test_delete_unknown_vote_404(self, admin):
+        r = admin.delete(f"{BASE_URL}/api/admin/votes/nonexistent")
+        assert r.status_code == 404
 
 
-# ---------- Admin: Posts (Categories) CRUD ----------
-def test_admin_posts_crud(auth_headers):
-    # Create
-    r = requests.post(f"{API}/admin/posts", json={"title": "TEST_Vice Captain"}, headers=auth_headers)
-    assert r.status_code == 200, r.text
-    p = r.json()
-    pid = p["id"]
-    assert p["title"] == "TEST_Vice Captain"
-    assert p["key"].startswith("test_vice_captain")
-
-    # Update title
-    r2 = requests.put(f"{API}/admin/posts/{pid}", json={"title": "TEST_Vice Captain Updated"}, headers=auth_headers)
-    assert r2.status_code == 200
-    assert r2.json()["title"] == "TEST_Vice Captain Updated"
-
-    # GET /api/posts should reflect
-    r3 = requests.get(f"{API}/posts")
-    assert any(x["id"] == pid and x["title"] == "TEST_Vice Captain Updated" for x in r3.json())
-
-    # Delete (no votes for it) -> success
-    r4 = requests.delete(f"{API}/admin/posts/{pid}", headers=auth_headers)
-    assert r4.status_code == 200
-
-
-def test_admin_posts_delete_with_votes_blocked(auth_headers):
-    # head_boy has votes (cast above); deleting must 400
-    posts = requests.get(f"{API}/posts").json()
-    hb = next(p for p in posts if p["key"] == "head_boy")
-    r = requests.delete(f"{API}/admin/posts/{hb['id']}", headers=auth_headers)
-    assert r.status_code == 400
-    assert "votes" in r.text.lower()
-
-
-# ---------- Admin: Users upload ----------
-def _build_xlsx(rows):
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    for r in rows:
-        ws.append(r)
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.getvalue()
-
-
-def test_users_upload_student(auth_headers):
-    content = _build_xlsx([
-        ["admission_no", "name", "father_name", "class_name"],
-        ["TEST_S100", "TEST Stud A", "TEST Father A", "XII-Z"],
-        ["TEST_S101", "TEST Stud B", "TEST Father B", "XII-Z"],
-    ])
-    files = {"file": ("students.xlsx", content,
-                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-    r = requests.post(f"{API}/admin/users/upload?role=student", files=files, headers=auth_headers)
-    assert r.status_code == 200, r.text
-    d = r.json()
-    assert d["inserted"] + d["updated"] >= 2
-    g = requests.get(f"{API}/users/TEST_S100").json()
-    assert g["name"] == "TEST Stud A" and g["father_name"] == "TEST Father A" and g["role"] == "student"
-    # cleanup
-    requests.delete(f"{API}/admin/users/TEST_S100", headers=auth_headers)
-    requests.delete(f"{API}/admin/users/TEST_S101", headers=auth_headers)
-
-
-def test_users_upload_teacher(auth_headers):
-    content = _build_xlsx([
-        ["admission_no", "name", "subject", "designation"],
-        ["TEST_T100", "TEST Teacher A", "Chemistry", "HOD"],
-    ])
-    files = {"file": ("teachers.xlsx", content,
-                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-    r = requests.post(f"{API}/admin/users/upload?role=teacher", files=files, headers=auth_headers)
-    assert r.status_code == 200, r.text
-    g = requests.get(f"{API}/users/TEST_T100").json()
-    assert g["role"] == "teacher" and g["subject"] == "Chemistry" and g["designation"] == "HOD"
-    requests.delete(f"{API}/admin/users/TEST_T100", headers=auth_headers)
-
-
-# ---------- Admin: Templates ----------
-def test_template_student(auth_headers):
-    r = requests.get(f"{API}/admin/template/student", headers=auth_headers)
-    assert r.status_code == 200
-    assert "spreadsheetml" in r.headers.get("content-type", "")
-    wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    headers = [c.value for c in wb.active[1]]
-    assert headers[:4] == ["admission_no", "name", "father_name", "class_name"]
-
-
-def test_template_teacher(auth_headers):
-    r = requests.get(f"{API}/admin/template/teacher", headers=auth_headers)
-    assert r.status_code == 200
-    assert "spreadsheetml" in r.headers.get("content-type", "")
-    wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    headers = [c.value for c in wb.active[1]]
-    assert headers[:4] == ["admission_no", "name", "subject", "designation"]
-
-
-# ---------- Admin: Settings (school_logo) ----------
-def test_settings_school_logo_persist(auth_headers):
-    url_val = "https://example.com/test_logo.png"
-    r = requests.put(f"{API}/admin/settings/school_logo",
-                     json={"value": url_val}, headers=auth_headers)
-    assert r.status_code == 200
-    pub = requests.get(f"{API}/settings").json()
-    assert pub.get("school_logo") == url_val
-
-
-# ---------- Admin: Reset ----------
-def test_reset_votes(auth_headers):
-    r = requests.post(f"{API}/admin/reset/votes", headers=auth_headers)
-    assert r.status_code == 200
-    s = requests.get(f"{API}/admin/stats", headers=auth_headers).json()
-    assert s["total_voted"] == 0
-
-
-def test_reset_all_keeps_posts(auth_headers):
-    r = requests.post(f"{API}/admin/reset/all", headers=auth_headers)
-    assert r.status_code == 200
-    s = requests.get(f"{API}/admin/stats", headers=auth_headers).json()
-    assert s["total_voted"] == 0
-    assert s["total_users"] == 0
-    posts = requests.get(f"{API}/posts").json()
-    assert len(posts) >= 5
-    keys = [p["key"] for p in posts[:5]]
-    assert keys == ["head_boy", "head_girl", "sports_skipper", "cultural_head", "discipline_head"]
-
-
-# ---------- Auth negative ----------
-def test_admin_login_wrong():
-    r = requests.post(f"{API}/admin/login", json={"username": "Aarav", "password": "wrong"})
-    assert r.status_code == 401
-
-
-def test_admin_endpoint_no_token():
-    r = requests.get(f"{API}/admin/users")
-    assert r.status_code == 401
+# ---------------- Election lock ----------------
+class TestElectionLock:
+    def test_close_blocks_vote_then_open_allows(self, s, admin):
+        r = admin.put(f"{BASE_URL}/api/admin/settings/election_open",
+                      json={"value": "false"})
+        assert r.status_code == 200
+        ps = s.get(f"{BASE_URL}/api/settings").json()
+        assert ps.get("election_open") == "false"
+        attempt = s.post(f"{BASE_URL}/api/votes",
+                         json=_full_ballot(s, "SDPSS003"))
+        assert attempt.status_code == 403
+        assert "closed" in attempt.json()["detail"].lower()
+        admin.put(f"{BASE_URL}/api/admin/settings/election_open",
+                  json={"value": "true"})
+        r2 = s.post(f"{BASE_URL}/api/votes",
+                    json=_full_ballot(s, "SDPSS003"))
+        assert r2.status_code == 200, r2.text

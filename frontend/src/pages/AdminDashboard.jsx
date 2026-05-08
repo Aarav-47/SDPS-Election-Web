@@ -138,7 +138,7 @@ export default function AdminDashboard() {
             <>
               {tab === "overview" && <Overview stats={stats} posts={posts} postLabels={postLabels} />}
               {tab === "results" && <Results stats={stats} posts={posts} />}
-              {tab === "voters" && <Voters stats={stats} users={users} posts={posts} postLabels={postLabels} />}
+              {tab === "voters" && <Voters stats={stats} users={users} posts={posts} postLabels={postLabels} onChange={refresh} />}
               {tab === "candidates" && <CandidatesTab candidates={candidates} posts={posts} postLabels={postLabels} onChange={refresh} />}
               {tab === "categories" && <CategoriesTab posts={posts} onChange={refresh} />}
               {tab === "students" && <UsersTab role="student" users={users.filter(u => u.role === "student")} onChange={refresh} />}
@@ -186,27 +186,23 @@ const Overview = ({ stats, posts, postLabels }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-xl font-bold">Leaders by Post</h2>
-            <Crown className="w-5 h-5 text-[color:var(--sdps-gold)]" />
+            <h2 className="font-display text-xl font-bold">Class-wise Turnout</h2>
+            <Users className="w-5 h-5 text-[color:var(--sdps-blue)]" />
           </div>
-          {posts.length === 0 ? <div className="text-sm text-[color:var(--sdps-muted)]">No categories defined.</div> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {posts.map(p => {
-                const w = stats.winners?.[p.key];
-                return (
-                  <div key={p.key} className="rounded-xl border border-[rgba(15,60,138,0.08)] p-4 flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-blue-100">
-                      {w?.photo ? <img src={w.photo} alt="" className="w-full h-full object-cover" /> : null}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] tracking-[0.22em] uppercase font-bold text-[color:var(--sdps-muted)]">{p.title}</div>
-                      <div className="font-bold truncate">{w?.name || "—"}</div>
-                      <div className="text-xs text-[color:var(--sdps-blue)] font-bold">{w?.votes || 0} votes</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {(stats.class_breakdown || []).length === 0 ? (
+            <div className="text-sm text-[color:var(--sdps-muted)]">No class data yet.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, (stats.class_breakdown.length) * 40)}>
+              <BarChart data={stats.class_breakdown} layout="vertical" margin={{ left: 8, right: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eef2f8" />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis dataKey="class_name" type="category" width={110} tick={{ fontWeight: 700, fill: "#0A1128", fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="voted" fill="#0F3C8A" name="Voted" radius={[0, 6, 6, 0]} />
+                <Bar dataKey="total" fill="#D4AF37" name="Total" radius={[0, 6, 6, 0]} fillOpacity={0.4} />
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
         <div className="rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6">
@@ -226,6 +222,32 @@ const Overview = ({ stats, posts, postLabels }) => {
             <div><div className="text-xs text-[color:var(--sdps-muted)] uppercase tracking-widest font-bold">Teachers</div><div className="font-bold">{stats.total_teachers || 0}</div></div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-bold">Leaders by Post</h2>
+          <Crown className="w-5 h-5 text-[color:var(--sdps-gold)]" />
+        </div>
+        {posts.length === 0 ? <div className="text-sm text-[color:var(--sdps-muted)]">No categories defined.</div> : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {posts.map(p => {
+              const w = stats.winners?.[p.key];
+              return (
+                <div key={p.key} className="rounded-xl border border-[rgba(15,60,138,0.08)] p-4 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-blue-100">
+                    {w?.photo ? <img src={w.photo} alt="" className="w-full h-full object-cover" /> : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] tracking-[0.22em] uppercase font-bold text-[color:var(--sdps-muted)]">{p.title}</div>
+                    <div className="font-bold truncate">{w?.name || "—"}</div>
+                    <div className="text-xs text-[color:var(--sdps-blue)] font-bold">{w?.votes || 0} votes</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -277,11 +299,21 @@ const Results = ({ stats, posts }) => {
   );
 };
 
-const Voters = ({ stats, users, posts, postLabels }) => {
+const Voters = ({ stats, users, posts, postLabels, onChange }) => {
   const [q, setQ] = useState("");
+  const [editingBallot, setEditingBallot] = useState(null);
   if (!stats) return null;
   const map = new Map(stats.votes.map(v => [v.admission_no, v]));
   const rows = users.filter(s => !q || s.admission_no.toLowerCase().includes(q.toLowerCase()) || s.name.toLowerCase().includes(q.toLowerCase()));
+
+  const deleteBallot = async (v) => {
+    if (!window.confirm(`Delete ballot of ${v.admission_no}? Voter can re-cast.`)) return;
+    try {
+      await api.delete(`/admin/votes/${v.id}`);
+      toast.success("Ballot deleted");
+      onChange();
+    } catch { toast.error("Failed"); }
+  };
   return (
     <div className="space-y-5">
       <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -302,6 +334,7 @@ const Voters = ({ stats, users, posts, postLabels }) => {
                 <th className="p-3">Role</th>
                 <th className="p-3">Status</th>
                 {posts.map(p => <th key={p.key} className="p-3">{p.title}</th>)}
+                <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -314,16 +347,80 @@ const Voters = ({ stats, users, posts, postLabels }) => {
                     <td className="p-3 capitalize">{s.role}</td>
                     <td className="p-3">{v ? <span className="text-emerald-600 font-bold">Voted</span> : <span className="text-amber-600 font-bold">Pending</span>}</td>
                     {posts.map(p => (
-                      <td key={p.key} className="p-3">{v?.selections?.[p.key] || <span className="text-gray-300">—</span>}</td>
+                      <td key={p.key} className="p-3">{v?.selection_names?.[p.key] || <span className="text-gray-300">—</span>}</td>
                     ))}
+                    <td className="p-3 text-right whitespace-nowrap">
+                      {v ? (
+                        <>
+                          <button onClick={() => setEditingBallot(v)} data-testid={`edit-ballot-${s.admission_no}`} className="p-1.5 rounded hover:bg-blue-50 mr-1" title="Edit ballot"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => deleteBallot(v)} data-testid={`del-ballot-${s.admission_no}`} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Delete ballot"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </>
+                      ) : null}
+                    </td>
                   </tr>
                 );
               })}
               {rows.length === 0 && (
-                <tr><td colSpan={4 + posts.length} className="p-10 text-center text-[color:var(--sdps-muted)]">No matches.</td></tr>
+                <tr><td colSpan={5 + posts.length} className="p-10 text-center text-[color:var(--sdps-muted)]">No matches.</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+      {editingBallot && (
+        <BallotEditModal ballot={editingBallot} posts={posts} onClose={() => setEditingBallot(null)} onSaved={() => { setEditingBallot(null); onChange(); }} />
+      )}
+    </div>
+  );
+};
+
+const BallotEditModal = ({ ballot, posts, onClose, onSaved }) => {
+  const [sel, setSel] = useState({ ...(ballot.selections || {}) });
+  const [cands, setCands] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    Promise.all(posts.map(p => api.get("/candidates", { params: { post: p.key } }).then(r => [p.key, r.data])))
+      .then(arr => setCands(Object.fromEntries(arr)))
+      .catch(() => toast.error("Failed to load candidates"));
+  }, [posts]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.put(`/admin/votes/${ballot.id}`, { selections: sel });
+      toast.success("Ballot updated");
+      onSaved();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-display text-2xl font-bold">Edit Ballot</h3>
+            <p className="text-sm text-[color:var(--sdps-muted)]">Voter: <span className="font-mono font-bold">{ballot.admission_no}</span> · {ballot.voter_name}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="space-y-3">
+          {posts.map(p => (
+            <div key={p.key} className="border rounded-xl p-3">
+              <Label>{p.title}</Label>
+              <select value={sel[p.key] || ""} onChange={(e) => setSel({ ...sel, [p.key]: e.target.value })} className="h-10 w-full border rounded-md px-3 mt-1" data-testid={`ballot-edit-${p.key}`}>
+                <option value="">— none —</option>
+                {(cands[p.key] || []).map(c => <option key={c.id} value={c.id}>{c.name} ({c.symbol})</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button onClick={onClose} className="h-11 px-5 rounded-xl border font-bold">Cancel</button>
+          <button onClick={save} disabled={busy} data-testid="ballot-save-btn" className="btn-primary-3d h-11 px-5 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50">
+            <Save className="w-4 h-4" /> {busy ? "Saving..." : "Save"}
+          </button>
         </div>
       </div>
     </div>
@@ -376,6 +473,9 @@ const CandidatesTab = ({ candidates, posts, postLabels, onChange }) => {
                     <div className="flex-1 min-w-0">
                       <div className="font-bold truncate">{c.name}</div>
                       <div className="text-xs text-[color:var(--sdps-muted)]">Symbol: {c.symbol || "—"}</div>
+                      {(c.adjustment ?? 0) !== 0 && (
+                        <div className="text-[10px] tracking-widest uppercase font-bold text-amber-700 mt-0.5">Adj: {c.adjustment > 0 ? "+" : ""}{c.adjustment}</div>
+                      )}
                       <div className="mt-2 flex gap-1">
                         <button onClick={() => setEditing(c)} className="p-1.5 rounded hover:bg-blue-50" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                         <button onClick={() => remove(c.id)} data-testid={`del-candidate-${c.id}`} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -392,7 +492,7 @@ const CandidatesTab = ({ candidates, posts, postLabels, onChange }) => {
       {(editing || creatingPost) && (
         <CandidateModal
           posts={posts}
-          initial={editing || { post: creatingPost, name: "", photo: "", symbol: "" }}
+          initial={editing || { post: creatingPost, name: "", photo: "", symbol: "", adjustment: 0 }}
           isNew={!editing}
           onClose={() => { setEditing(null); setCreatingPost(null); }}
           onSaved={() => { setEditing(null); setCreatingPost(null); onChange(); }}
@@ -438,6 +538,10 @@ const CandidateModal = ({ posts, initial, isNew, onClose, onSaved }) => {
         <div className="space-y-4">
           <div><Label>Name</Label><Input data-testid="cand-name-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><Label>Election Symbol (text)</Label><Input data-testid="cand-symbol-input" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="e.g. Star, Sun, Book" /></div>
+          <div>
+            <Label>Vote Adjustment <span className="text-xs font-normal text-[color:var(--sdps-muted)]">(added to actual count, can be negative)</span></Label>
+            <Input data-testid="cand-adjustment-input" type="number" value={form.adjustment ?? 0} onChange={(e) => setForm({ ...form, adjustment: parseInt(e.target.value || "0", 10) })} placeholder="0" />
+          </div>
           <div><Label>Photo URL</Label><Input data-testid="cand-photo-url-input" value={form.photo?.startsWith("data:") ? "" : (form.photo || "")} onChange={(e) => setForm({ ...form, photo: e.target.value })} placeholder="https://…" /></div>
           <div>
             <Label>Or upload from device</Label>
@@ -692,6 +796,7 @@ const UsersTab = ({ role, users, onChange }) => {
 
 const SettingsTab = ({ settings, onChange }) => {
   const [logo, setLogo] = useState(settings.school_logo || "");
+  const [open, setOpen] = useState(String(settings.election_open ?? "true").toLowerCase() !== "false");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef();
 
@@ -743,9 +848,37 @@ const SettingsTab = ({ settings, onChange }) => {
 
       <div className="rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0F3C8A] to-[#1A55B6] flex items-center justify-center"><ImageIcon className="w-5 h-5 text-white" /></div>
-          <h2 className="font-display text-xl font-bold">School Logo</h2>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${open ? "bg-gradient-to-br from-emerald-500 to-emerald-700" : "bg-gradient-to-br from-red-500 to-red-700"}`}>
+            {open ? <ShieldCheck className="w-5 h-5 text-white" /> : <AlertTriangle className="w-5 h-5 text-white" />}
+          </div>
+          <h2 className="font-display text-xl font-bold">Election Window</h2>
         </div>
+        <p className="text-sm text-[color:var(--sdps-muted)] mb-4">Lock the kiosk between voting hours or after polling closes. When closed, students see a "Voting closed" message and ballots are rejected.</p>
+        <div className="flex items-center gap-4">
+          <div className={`px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase ${open ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+            {open ? "Voting OPEN" : "Voting CLOSED"}
+          </div>
+          <button data-testid="toggle-election-btn" onClick={async () => {
+            const next = !open;
+            try {
+              await api.put("/admin/settings/election_open", { value: next ? "true" : "false" });
+              setOpen(next);
+              toast.success(next ? "Voting unlocked" : "Voting locked");
+              onChange();
+            } catch { toast.error("Failed to update"); }
+          }} className={`h-11 px-5 rounded-xl font-bold flex items-center gap-2 ${open ? "bg-red-600 text-white hover:bg-red-700" : "btn-primary-3d"}`}>
+            {open ? "Close Voting" : "Open Voting"}
+          </button>
+          <Link to="/results" target="_blank" className="h-11 px-5 rounded-xl border-2 border-[rgba(15,60,138,0.18)] bg-white font-bold flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" /> Open Live Results
+          </Link>
+          <Link to="/admin/declaration" className="h-11 px-5 rounded-xl btn-gold-3d font-bold flex items-center gap-2" data-testid="declaration-link">
+            <Crown className="w-4 h-4" /> Declaration Page
+          </Link>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-[rgba(15,60,138,0.08)] p-6">
         <p className="text-sm text-[color:var(--sdps-muted)] mb-4">Displayed on the kiosk header and admin sidebar. PNG/JPG/SVG, under 1MB. Or paste a URL.</p>
         <div className="flex flex-col md:flex-row gap-6 items-start">
           <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-[rgba(15,60,138,0.2)] flex items-center justify-center bg-blue-50 overflow-hidden">

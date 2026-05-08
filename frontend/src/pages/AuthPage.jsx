@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 import { useVote } from "../context/VoteContext";
 import { api } from "../lib/api";
 import { toast } from "sonner";
-import { ArrowRight, KeyRound, ShieldCheck, Vote, GraduationCap, BookOpen } from "lucide-react";
+import { ArrowRight, KeyRound, ShieldCheck, Vote, GraduationCap, BookOpen, Lock } from "lucide-react";
 
 const PREFIXES = { student: "SDPSS", teacher: "SDPSE" };
 
@@ -13,8 +13,15 @@ export default function AuthPage() {
   const [role, setRole] = useState("student");
   const [adm, setAdm] = useState(PREFIXES.student);
   const [loading, setLoading] = useState(false);
+  const [closed, setClosed] = useState(false);
   const { setStudent, reset } = useVote();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      setClosed(String(data?.election_open ?? "true").toLowerCase() === "false");
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setAdm((prev) => {
@@ -58,6 +65,15 @@ export default function AuthPage() {
 
   return (
     <KioskShell>
+      {closed && (
+        <div className="mb-8 rounded-2xl bg-gradient-to-r from-red-500 to-red-600 text-white p-5 shadow-lg flex items-center gap-4" data-testid="closed-banner">
+          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center"><Lock className="w-6 h-6" /></div>
+          <div>
+            <div className="font-display font-bold text-2xl">Voting is currently CLOSED</div>
+            <div className="text-sm opacity-90">The election administrator has locked the kiosk. Please come back later.</div>
+          </div>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 gap-12 items-center">
         <div className="rise">
           <div className="step-pill mb-6"><Vote className="w-3.5 h-3.5" /> Step 1 · Identity</div>

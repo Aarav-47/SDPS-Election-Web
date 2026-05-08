@@ -55,6 +55,7 @@ class Candidate(BaseModel):
     photo: str = ""
     symbol: str = ""
     symbol_image: str = ""
+    adjustment: int = 0  # admin manual offset added to real vote count
 
 class CandidateCreate(BaseModel):
     post: str
@@ -62,6 +63,7 @@ class CandidateCreate(BaseModel):
     photo: str = ""
     symbol: str = ""
     symbol_image: str = ""
+    adjustment: int = 0
 
 class CandidateUpdate(BaseModel):
     name: Optional[str] = None
@@ -69,6 +71,7 @@ class CandidateUpdate(BaseModel):
     symbol: Optional[str] = None
     symbol_image: Optional[str] = None
     post: Optional[str] = None
+    adjustment: Optional[int] = None
 
 class PostCreate(BaseModel):
     title: str
@@ -80,6 +83,9 @@ class PostUpdate(BaseModel):
 
 class Ballot(BaseModel):
     admission_no: str
+    selections: Dict[str, str]
+
+class BallotUpdate(BaseModel):
     selections: Dict[str, str]
 
 class AdminLogin(BaseModel):
@@ -124,6 +130,10 @@ async def seed_data():
 
     if await db.posts.count_documents({}) == 0:
         await db.posts.insert_many([{"id": str(uuid.uuid4()), **p} for p in DEFAULT_POSTS])
+
+    # Default settings
+    if not await db.settings.find_one({"key": "election_open"}):
+        await db.settings.insert_one({"key": "election_open", "value": "true"})
 
     if await db.users.count_documents({}) == 0:
         students = [
@@ -198,6 +208,10 @@ async def get_candidates(post: Optional[str] = None):
 
 @api.post("/votes")
 async def cast_vote(ballot: Ballot):
+    # Check election lock
+    s = await db.settings.find_one({"key": "election_open"}, {"_id": 0})
+    if s and str(s.get("value", "true")).lower() in ("false", "0", "closed"):
+        raise HTTPException(status_code=403, detail="Voting is currently closed")
     adm = ballot.admission_no.strip()
     user = await db.users.find_one({"admission_no": adm}, {"_id": 0})
     if not user:
@@ -216,6 +230,7 @@ async def cast_vote(ballot: Ballot):
     doc = {
         "id": str(uuid.uuid4()), "admission_no": adm,
         "voter_name": user["name"], "voter_role": user.get("role", "student"),
+        "voter_class": user.get("class_name", ""),
         "selections": ballot.selections, "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     await db.votes.insert_one(doc)
@@ -445,6 +460,43 @@ async def delete_candidate(cid: str, _: str = Depends(verify_admin)):
     return {"ok": True}
 
 
+# ---------- Public Live Results ----------
+@api.get("/results")
+async def public_results():
+    posts = await db.posts.find({}, {"_id": 0}).sort("order", 1).to_list(1000)
+    candidates = await db.candidates.find({}, {"_id": 0}).to_list(2000)
+    votes = await db.votes.find({}, {"_id": 0, "selections": 1, "voter_class": 1, "admission_no": 1}).to_list(20000)
+    total_users = await db.users.count_documents({})
+
+    counts = {}
+    for v in votes:
+        for cid in (v.get("selections") or {}).values():
+            counts[cid] = counts.get(cid, 0) + 1
+
+    by_post = {p["key"]: [] for p in posts}
+    for c in candidates:
+        adj = int(c.get("adjustment") or 0)
+        entry = {
+            "candidate_id": c["id"], "name": c["name"],
+            "photo": c.get("photo", ""), "symbol": c.get("symbol", ""),
+            "votes": counts.get(c["id"], 0) + adj,
+        }
+        if c["post"] in by_post:
+            by_post[c["post"]].append(entry)
+    for k in by_post:
+        by_post[k].sort(key=lambda x: x["votes"], reverse=True)
+
+    return {
+        "posts": posts,
+        "by_post": by_post,
+        "winners": {p["key"]: (by_post[p["key"]][0] if by_post[p["key"]] else None) for p in posts},
+        "total_voted": len(votes),
+        "total_users": total_users,
+        "turnout_pct": round((len(votes) / total_users * 100), 1) if total_users else 0,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # ---------- Admin: Stats ----------
 @api.get("/admin/stats")
 async def stats(_: str = Depends(verify_admin)):
@@ -463,10 +515,13 @@ async def stats(_: str = Depends(verify_admin)):
         for pkey, cid in v.get("selections", {}).items():
             counts[cid] = counts.get(cid, 0) + 1
     for c in candidates:
+        adj = int(c.get("adjustment") or 0)
+        real = counts.get(c["id"], 0)
         entry = {
             "candidate_id": c["id"], "name": c["name"],
             "photo": c.get("photo", ""), "symbol": c.get("symbol", ""),
-            "votes": counts.get(c["id"], 0),
+            "real_votes": real, "adjustment": adj,
+            "votes": real + adj,
         }
         if c["post"] in by_post:
             by_post[c["post"]].append(entry)
@@ -474,6 +529,17 @@ async def stats(_: str = Depends(verify_admin)):
     for pkey, lst in by_post.items():
         lst.sort(key=lambda x: x["votes"], reverse=True)
         winners[pkey] = lst[0] if lst else None
+
+    # class-wise turnout
+    class_groups: Dict[str, Dict[str, int]] = {}
+    voted_set = {v["admission_no"] for v in votes}
+    async for u in db.users.find({"role": "student"}, {"_id": 0}):
+        cls = u.get("class_name") or "Unassigned"
+        g = class_groups.setdefault(cls, {"class_name": cls, "total": 0, "voted": 0})
+        g["total"] += 1
+        if u["admission_no"] in voted_set:
+            g["voted"] += 1
+    class_breakdown = sorted(class_groups.values(), key=lambda x: x["class_name"])
 
     return {
         "posts": posts,
@@ -484,19 +550,46 @@ async def stats(_: str = Depends(verify_admin)):
         "turnout_pct": round((len(votes) / total_users * 100), 1) if total_users else 0,
         "by_post": by_post,
         "winners": winners,
+        "class_breakdown": class_breakdown,
         "votes": [
             {
+                "id": v.get("id"),
                 "admission_no": v["admission_no"],
                 "voter_name": v.get("voter_name", v.get("student_name", "")),
                 "voter_role": v.get("voter_role", "student"),
+                "voter_class": v.get("voter_class", ""),
                 "timestamp": v.get("timestamp", ""),
-                "selections": {
+                "selections": v.get("selections", {}),
+                "selection_names": {
                     pkey: cand_map.get(cid, {}).get("name", "Unknown")
                     for pkey, cid in v.get("selections", {}).items()
                 },
             } for v in votes
         ],
     }
+
+
+# ---------- Admin: Vote Manipulation ----------
+@api.put("/admin/votes/{vote_id}")
+async def edit_vote(vote_id: str, body: BallotUpdate, _: str = Depends(verify_admin)):
+    v = await db.votes.find_one({"id": vote_id}, {"_id": 0})
+    if not v:
+        raise HTTPException(status_code=404, detail="Ballot not found")
+    keys = await active_post_keys()
+    for pkey, cid in body.selections.items():
+        if pkey not in keys:
+            raise HTTPException(status_code=400, detail=f"Unknown category: {pkey}")
+        if not await db.candidates.find_one({"id": cid, "post": pkey}):
+            raise HTTPException(status_code=400, detail=f"Invalid candidate for {pkey}")
+    await db.votes.update_one({"id": vote_id}, {"$set": {"selections": body.selections}})
+    return {"ok": True}
+
+@api.delete("/admin/votes/{vote_id}")
+async def delete_vote(vote_id: str, _: str = Depends(verify_admin)):
+    res = await db.votes.delete_one({"id": vote_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Ballot not found")
+    return {"ok": True}
 
 
 # ---------- Admin: Settings ----------
