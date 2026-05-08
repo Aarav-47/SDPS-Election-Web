@@ -16,13 +16,13 @@ export default function LiveResults() {
   const [tick, setTick] = useState(0);
   const [pulse, setPulse] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("sdps_admin_token");
+useEffect(() => {
+  const token = localStorage.getItem("sdps_admin_token");
 
-    if (!token) {
-      window.location.href = "/admin?redirect=results";
-    }
-  }, [navigate]);
+  if (!token) {
+    navigate("/admin?redirect=results");
+  }
+}, []);
 
   useEffect(() => {
     let active = true;
