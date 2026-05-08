@@ -7,7 +7,7 @@ import {
   BarChart3, Users, UserSquare2, Trophy, LogOut, Upload, Plus, Trash2, Pencil,
   ShieldCheck, FileSpreadsheet, Crown, Award, Sparkles, X, Save, Settings, ListOrdered,
   ImageIcon, RotateCcw, AlertTriangle, GraduationCap, BookOpen, Download,
-  SlidersHorizontal, Minus, Wand2, Tv2
+  SlidersHorizontal, Minus, Wand2, Tv2, PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,8 +34,16 @@ export default function AdminDashboard() {
   const [posts, setPosts] = useState([]);
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const v = localStorage.getItem("sdps_admin_sidebar");
+    return v === null ? true : v === "true";
+  });
   const navigate = useNavigate();
   const adminUser = localStorage.getItem("sdps_admin_user") || "Admin";
+
+  useEffect(() => {
+    localStorage.setItem("sdps_admin_sidebar", String(sidebarOpen));
+  }, [sidebarOpen]);
 
   const refresh = async () => {
     setLoading(true);
@@ -82,6 +90,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F8F9FA] via-white to-[#EEF3FB]">
       <div className="flex">
+        {sidebarOpen && (
         <aside className="w-64 min-h-screen border-r border-[rgba(15,60,138,0.08)] bg-white p-5 hidden md:block">
           <div className="flex items-center gap-3 mb-8">
             {settings.school_logo ? (
@@ -120,8 +129,18 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </aside>
+        )}
 
-        <main className="flex-1 p-6 md:p-10">
+        <main className="flex-1 p-6 md:p-10 relative">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            data-testid="sidebar-toggle-btn"
+            title={sidebarOpen ? "Hide menu (full screen)" : "Show menu"}
+            className="hidden md:flex absolute top-6 left-4 z-20 w-10 h-10 rounded-xl bg-white border border-[rgba(15,60,138,0.15)] shadow-sm hover:bg-blue-50 items-center justify-center text-[color:var(--sdps-blue)]"
+          >
+            {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+          </button>
+          <div className={sidebarOpen ? "md:pl-12" : "md:pl-14"}>
           <div className="md:hidden flex gap-2 overflow-x-auto pb-3 mb-3">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)} data-testid={`mtab-${t.key}`}
@@ -149,6 +168,7 @@ export default function AdminDashboard() {
               {tab === "settings" && <SettingsTab settings={settings} onChange={refresh} />}
             </>
           )}
+          </div>
         </main>
       </div>
     </div>
