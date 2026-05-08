@@ -252,7 +252,8 @@ async def admin_login(body: AdminLogin):
 async def list_users(role: Optional[str] = None, _: str = Depends(verify_admin)):
     q = {"role": role} if role else {}
     docs = await db.users.find(q, {"_id": 0}).to_list(10000)
-    voted_set = {v["admission_no"] async for v in db.votes.find({}, {"_id": 0, "admission_no": 1})}
+    voted_docs = await db.votes.find({}, {"_id": 0, "admission_no": 1}).to_list(20000)
+    voted_set = {v["admission_no"] for v in voted_docs}
     for d in docs:
         d["has_voted"] = d["admission_no"] in voted_set
     return docs
@@ -374,7 +375,8 @@ async def admin_posts(_: str = Depends(verify_admin)):
     for c in cands:
         counts[c["post"]] = counts.get(c["post"], 0) + 1
     votes_by_post = {}
-    async for v in db.votes.find({}, {"_id": 0, "selections": 1}):
+    vote_docs = await db.votes.find({}, {"_id": 0, "selections": 1}).to_list(20000)
+    for v in vote_docs:
         for k in v.get("selections", {}):
             votes_by_post[k] = votes_by_post.get(k, 0) + 1
     for d in docs:
@@ -419,7 +421,8 @@ async def delete_post(pid: str, _: str = Depends(verify_admin)):
     if not p:
         raise HTTPException(status_code=404, detail="Not found")
     has_votes = False
-    async for v in db.votes.find({}, {"_id": 0, "selections": 1}):
+    vote_docs = await db.votes.find({}, {"_id": 0, "selections": 1}).to_list(20000)
+    for v in vote_docs:
         if p["key"] in (v.get("selections") or {}):
             has_votes = True
             break
@@ -473,7 +476,8 @@ async def public_board():
 
     # class breakdown (students)
     class_groups: Dict[str, Dict[str, int]] = {}
-    async for u in db.users.find({"role": "student"}, {"_id": 0}):
+    student_docs = await db.users.find({"role": "student"}, {"_id": 0}).to_list(10000)
+    for u in student_docs:
         cls = u.get("class_name") or "Unassigned"
         g = class_groups.setdefault(cls, {"class_name": cls, "total": 0, "voted": 0})
         g["total"] += 1
@@ -578,7 +582,8 @@ async def stats(_: str = Depends(verify_admin)):
     # class-wise turnout
     class_groups: Dict[str, Dict[str, int]] = {}
     voted_set = {v["admission_no"] for v in votes}
-    async for u in db.users.find({"role": "student"}, {"_id": 0}):
+    student_docs = await db.users.find({"role": "student"}, {"_id": 0}).to_list(10000)
+    for u in student_docs:
         cls = u.get("class_name") or "Unassigned"
         g = class_groups.setdefault(cls, {"class_name": cls, "total": 0, "voted": 0})
         g["total"] += 1
