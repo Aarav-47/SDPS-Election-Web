@@ -84,11 +84,7 @@ frontend/node_modules/.cache/default-development/7.pack
 frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/10.pack
 frontend/node_modules/.cache/default-development/4.pack
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
+# Environment and credential files (kept tracked for Emergent deployment)
 credentials.json
 *.pem
 *.key
