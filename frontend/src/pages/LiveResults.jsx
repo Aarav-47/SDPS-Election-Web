@@ -4,6 +4,21 @@ import { api } from "../lib/api";
 import { Crown, Sparkles, Users, ShieldCheck, RefreshCw } from "lucide-react";
 
 export default function LiveResults() {
+
+  const navigate = useNavigate();
+
+useEffect(() => {
+
+  const token = localStorage.getItem("admin_token");
+
+  if (!token) {
+
+    navigate("/admin");
+
+  }
+
+}, [navigate]);
+  
   const [data, setData] = useState(null);
   const [tick, setTick] = useState(0);
   const [pulse, setPulse] = useState(false);
