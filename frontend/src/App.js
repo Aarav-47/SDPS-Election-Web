@@ -1,7 +1,6 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import { VoteProvider } from "./context/VoteContext";
 import AuthPage from "./pages/AuthPage";
 import ConfirmPage from "./pages/ConfirmPage";
