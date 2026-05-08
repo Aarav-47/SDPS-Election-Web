@@ -9,13 +9,13 @@ export default function LiveResults() {
 
 useEffect(() => {
 
- const token = localStorage.getItem("sdps_admin_token");
+  const token = localStorage.getItem("sdps_admin_token");
 
   if (!token) {
-
-navigate("/admin?redirect=results");
-
+    window.location.href = "/admin?redirect=results";
   }
+
+}, []);
 
 }, [navigate]);
   
