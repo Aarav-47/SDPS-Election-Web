@@ -7,15 +7,21 @@ export default function LiveResults() {
 
   const navigate = useNavigate();
 
-useEffect(() => {
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
+import { Crown, Sparkles, Users, ShieldCheck, RefreshCw } from "lucide-react";
 
-  const token = localStorage.getItem("sdps_admin_token");
+export default function LiveResults() {
 
-  if (!token) {
-    window.location.href = "/admin?redirect=results";
-  }
+  useEffect(() => {
 
-}, []);
+    const token = localStorage.getItem("sdps_admin_token");
+
+    if (!token) {
+      window.location.href = "/admin?redirect=results";
+    }
+
+  }, []);
 
 }, [navigate]);
   
