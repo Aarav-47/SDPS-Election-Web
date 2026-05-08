@@ -9,7 +9,7 @@ export default function LiveResults() {
 
 useEffect(() => {
 
-  const token = localStorage.getItem("admin_token");
+ const token = localStorage.getItem("sdps_admin_token");
 
   if (!token) {
 
