@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { Crown, Sparkles, Users, ShieldCheck, RefreshCw } from "lucide-react";
 
