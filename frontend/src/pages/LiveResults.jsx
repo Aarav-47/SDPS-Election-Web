@@ -50,7 +50,7 @@ export default function LiveResults() {
 
       load();
 
-    }, 30000);
+    }, 40000);
 
     return () => {
 
