@@ -16,6 +16,43 @@ import jwt
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 
+@app.on_event("startup")
+async def startup():
+    try:
+        print("Connecting to MongoDB...")
+
+        # Check MongoDB connection
+        await client.admin.command("ping")
+        print("MongoDB connected")
+
+        # Create indexes (fast queries)
+        await db.users.create_index("admission_no")
+        await db.users.create_index("role")
+
+        await db.votes.create_index("admission_no")
+        await db.votes.create_index("id")
+
+        await db.candidates.create_index("id")
+        await db.candidates.create_index("post")
+
+        await db.posts.create_index("key")
+        await db.posts.create_index("order")
+
+        await db.settings.create_index("key")
+        await db.admins.create_index("username")
+
+        print("Indexes created")
+
+        # Run seeding
+        print("Running seed_data()...")
+        await seed_data()
+        print("Seed complete")
+
+        logger.info("SDPS Election API started.")
+
+    except Exception as e:
+        print(f"STARTUP ERROR: {str(e)}")
+        
 app = FastAPI()
 
 @app.middleware("http")
