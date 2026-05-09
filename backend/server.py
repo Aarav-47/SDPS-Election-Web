@@ -19,10 +19,34 @@ from openpyxl.styles import Font, PatternFill, Alignment
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+MONGO_URI = os.getenv("MONGO_URI")
 
+try:
+
+    logging.info("Connecting to MongoDB...")
+
+    client = MongoClient(
+
+        MONGO_URI,
+
+        serverSelectionTimeoutMS=5000,
+
+        connectTimeoutMS=5000,
+
+        socketTimeoutMS=5000
+
+    )
+
+    client.server_info()
+
+    db = client["sdps-election"]
+
+    logging.info("MongoDB Connected Successfully")
+
+except Exception as e:
+
+    logging.error(f"MongoDB Connection Error: {str(e)}")
+    
 JWT_SECRET = os.environ.get('JWT_SECRET', 'sdps-election-secret-key-2026')
 JWT_ALGO = 'HS256'
 
