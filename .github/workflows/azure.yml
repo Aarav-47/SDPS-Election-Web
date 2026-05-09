@@ -18,6 +18,6 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'sdps-election-rg-d9cqbwakd4exb8d0'
+          app-name: 'sdps-election-rg'
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./backend
