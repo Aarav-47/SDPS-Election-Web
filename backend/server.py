@@ -16,6 +16,22 @@ import jwt
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 
+app = FastAPI()
+
+@app.middleware("http")
+
+async def log_time(request, call_next):
+
+    start = time.time()
+
+    response = await call_next(request)
+
+    process_time = time.time() - start
+
+    print(f"{request.url.path} took {process_time:.2f}s")
+
+    return response
+    
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
